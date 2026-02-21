@@ -14,7 +14,7 @@ var pid = sys_pid();
 if (fexists("project.pmake")) {
     project = freadln("project.pmake", 0); // Line 1 - Name
     version = freadln("project.pmake", 1); // Line 2 - Version
-    subver = freadln("project.pmake", 2); // Line 3 - Subversion command
+    subver = freadln("project.pmake", 2); // Line 3 - Sub-version command
     installFolder = fabsolute(freadln("project.pmake", 3)); // Line 4 - Install folder
     srcFolder = fabsolute(freadln("project.pmake", 4)); // Line 5 - Source folder
     cacheFolder = fabsolute(freadln("project.pmake", 5)); // Line 6 - Cache folder
