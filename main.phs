@@ -31,7 +31,7 @@ fn printHelp(program: string, configured: bool) {
         presetMsg = "required only if regenerating";
     } else {
         putf("Usage: [runtime] %s <preset> [options]\n", program);
-        sys_execute("cmake --list-presets"); 
+        sys_fork("cmake", "--list-presets"); 
         presetMsg = "required to generate build files";
     }
     printf(`
@@ -45,21 +45,21 @@ Options:
 }
 
 fn configure(srcFolder: string, buildFolder: string, preset: string) -> bool {
-    if (sys_execute(c_fmt("cmake -S %s -B %s --preset %s", srcFolder, buildFolder, preset)) == 0) {
+    if (sys_fork("cmake", "-S", srcFolder, "-B", buildFolder, "--preset", preset) == 0) {
         return true;
     }
     return false;
 }
 
 fn build(buildFolder: string) -> bool {
-    if (sys_execute(c_fmt("ninja -C %s", buildFolder)) == 0) {
+    if (sys_fork("ninja", "-C", buildFolder) == 0) {
         return true;
     }
     return false;
 }
 
 fn install(buildFolder: string, prefixFolder: string) -> bool {
-    if (sys_execute(c_fmt("cmake --install %s --prefix %s", buildFolder, prefixFolder)) == 0) {
+    if (sys_fork("cmake", "--install", buildFolder, "--prefix", prefixFolder) == 0) {
         return true;
     }
     return false;
@@ -125,7 +125,7 @@ fn main() -> int {
     printf("pmake - Portable CMake Wrapper (%s)\n%s %s", project, project, version);
     if (subver) { 
         print("-");
-        sys_execute(subver);
+        sys_shell(subver);
     }
     else puts("");
     var preset;
@@ -254,7 +254,7 @@ fn main() -> int {
     if (doConfigure || !fexists(c_fmt(cacheFile, "configure"))) {
         writeStatus("config");
     	putf("Configuring %s...", project);
-        if (configure(srcFolder, outFolder, preset)) {
+        if (!configure(srcFolder, outFolder, preset)) {
             puts_error("Configuration failed");
             return 1;
         }
@@ -269,7 +269,7 @@ fn main() -> int {
     if (doBuild) {
         writeStatus("build");
         putf("Building %s...", project);
-        if (build(outFolder)) {
+        if (!build(outFolder)) {
             puts_error("Build failed");
             return 1;
         }
@@ -279,7 +279,7 @@ fn main() -> int {
     if (doInstall) {
     writeStatus("install");
 	putf("Installing %s...", project);
-        if (install(outFolder, installFolder)) {
+        if (!install(outFolder, installFolder)) {
             puts_error("Installation failed");
             return 1;
         }
