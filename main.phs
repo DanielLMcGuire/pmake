@@ -218,7 +218,7 @@ fn main() -> int {
         var pid = to_int(substr(freadln(l_statusFile, "1"), 5));
         if (pid != sys_pid()) {
             putf_error("pmake locked by another process %d", l_statusFile);
-            return 2;
+            shutdown(2); // Do not clear lock
         }
     }
     if (!doClean) writeStatus("init");
