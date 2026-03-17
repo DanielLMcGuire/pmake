@@ -91,7 +91,7 @@ fn readCache(cacheName: string) -> string {
 fn writeStatus(text: string) -> bool {
     var fileName = c_fmt(lockFile, project);
     var tmpFile = c_fmt("%s.tmp", fileName);
-    var finalText = c_fmt("%s\nPID: %d", text, pid);
+    var finalText = c_fmt("%s\n%d", text, pid);
     if (fexists(fileName)) {
         if (!frm(fileName)) {
             puts_error("Failed to delete old status file");
@@ -215,8 +215,8 @@ fn main() -> int {
     }
 
     if (fexists(l_statusFile)) {
-        var pid = to_int(substr(freadln(l_statusFile, "1"), 5));
-        if (pid != sys_pid()) {
+        var l_pid = to_int(substr(freadln(l_statusFile, "1"), 1));
+        if (l_pid != pid) {
             putf_error("pmake locked by another process %d", l_statusFile);
             shutdown(2); // Do not clear lock
         }
@@ -289,5 +289,9 @@ fn main() -> int {
 }
 
 var stat = main();
-clearStatus();
+var l_pid = to_int(substr(freadln(l_statusFile, "1"), 1));
+
+if (l_pid == pid)
+    clearStatus();
+
 shutdown(stat);
