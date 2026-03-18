@@ -7,10 +7,7 @@ var subver;
 var installFolder = "out";
 var srcFolder = fcd();
 var cacheFolder = ".pmake";
-var cacheFile = c_fmt("%s/%%s.cache", cacheFolder);
-var lockFile = c_fmt("%s/%%s.lock", cacheFolder);
 var pid = sys_pid();
-var l_statusFile = c_fmt(lockFile, project);
 
 if (fexists("project.pmake")) {
     project = freadln("project.pmake", 0); // Line 1 - Name
@@ -24,6 +21,10 @@ if (fexists("project.pmake")) {
 } else {
     puts_error("project.pmake file not found, using defaults");
 }
+
+var cacheFile = c_fmt("%s/%%s.cache", cacheFolder);
+var lockFile = c_fmt("%s/%%s.lock", cacheFolder);
+var l_statusFile = c_fmt(lockFile, project);
 
 fn printHelp(program: string, configured: bool) {
     var presetMsg = "preset_message";
