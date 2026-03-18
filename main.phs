@@ -24,7 +24,7 @@ if (fexists("project.pmake")) {
 
 var cacheFile = c_fmt("%s/%%s.cache", cacheFolder);
 var lockFile = c_fmt("%s/%%s.lock", cacheFolder);
-var l_statusFile = c_fmt(lockFile, project);
+
 
 fn printHelp(program: string, configured: bool) {
     var presetMsg = "preset_message";
@@ -136,6 +136,7 @@ fn main() -> int {
     var doInstall = false;
     var doClean = false;
     var outFolder = c_fmt("%s/CMakeBuild", cacheFolder);
+    var l_statusFile = c_fmt(lockFile, project);
     var i = 1;
 
     if (!fexists(cacheFolder)) {
@@ -290,9 +291,5 @@ fn main() -> int {
 }
 
 var stat = main();
-var l_pid = to_int(freadln(l_statusFile, 1));
-
-if (l_pid == pid)
-    clearStatus();
-
+clearStatus();
 shutdown(stat);
