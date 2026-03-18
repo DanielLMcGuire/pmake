@@ -10,6 +10,7 @@ var cacheFolder = ".pmake";
 var cacheFile = c_fmt("%s/%%s.cache", cacheFolder);
 var lockFile = c_fmt("%s/%%s.lock", cacheFolder);
 var pid = sys_pid();
+var l_statusFile = c_fmt(lockFile, project);
 
 if (fexists("project.pmake")) {
     project = freadln("project.pmake", 0); // Line 1 - Name
@@ -133,8 +134,7 @@ fn main() -> int {
     var doBuild = false;
     var doInstall = false;
     var doClean = false;
-    var outFolder = ".pmake/CMakeBuild";
-    var l_statusFile = c_fmt(lockFile, project);
+    var outFolder = c_fmt("%s/CMakeBuild", cacheFolder);
     var i = 1;
 
     if (!fexists(cacheFolder)) {
@@ -215,7 +215,7 @@ fn main() -> int {
     }
 
     if (fexists(l_statusFile)) {
-        var l_pid = to_int(substr(freadln(l_statusFile, "1"), 1));
+        var l_pid = to_int(freadln(l_statusFile, 1));
         if (l_pid != pid) {
             putf_error("pmake locked by another process %d", l_pid);
             shutdown(2); // Do not clear lock
@@ -289,7 +289,7 @@ fn main() -> int {
 }
 
 var stat = main();
-var l_pid = to_int(substr(freadln(l_statusFile, "1"), 1));
+var l_pid = to_int(freadln(l_statusFile, 1));
 
 if (l_pid == pid)
     clearStatus();
