@@ -1,0 +1,22 @@
+fn writeCache(text: string, cacheName: string) -> bool {
+    var fileName = c_fmt(cacheFile, cacheName);
+    if (fexists(fileName)) {
+        if (!frm(fileName)) {
+            puts_error("Failed to delete old cache file");
+            return false;
+        }
+    }
+    if (!fwrite(fileName, text)) {
+        puts_error("Failed to write cache file");
+        return false;
+    }
+    return true;
+}
+
+fn readCache(cacheName: string) -> string {
+    var fileName = c_fmt(cacheFile, cacheName);
+    if (!fexists(fileName)) {
+        return "";
+    }
+    return fread(fileName);
+}

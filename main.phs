@@ -1,6 +1,10 @@
 #!/usr/bin/env phasor
 using("stdsys", "stdtype", "stdio", "stdfile", "stdstr");
-include "utils.phs";
+
+include "build.phs";
+include "cache.phs";
+include "lockfile.phs";
+include "cache.phs";
 
 var project = "<project>";
 var version = "0.0.0";

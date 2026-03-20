@@ -1,0 +1,32 @@
+fn writeStatus(text: string) -> bool {
+    var fileName = c_fmt(lockFile, project);
+    var tmpFile = c_fmt("%s.tmp", fileName);
+    var finalText = c_fmt("%s\n%d", text, pid);
+    if (fexists(fileName)) {
+        if (!frm(fileName)) {
+            puts_error("Failed to delete old status file");
+            return false;
+        }
+    }
+    if (!fwrite(tmpFile, finalText)) {
+        puts_error("Failed to write temp status file");
+        return false;
+    } else {
+        if (!fmv(tmpFile, fileName)) {
+            puts_error("Failed to move status file");
+            return false;
+        }
+    }
+    return true;
+}
+
+fn clearStatus() -> bool {
+    var fileName = c_fmt(lockFile, project);
+    if (fexists(fileName)) {
+        if (!frm(fileName)) {
+            puts_error("Failed to delete status file");
+            return false;
+        }
+    }
+    return true;
+}

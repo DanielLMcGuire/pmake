@@ -1,0 +1,20 @@
+fn configure(srcFolder: string, buildFolder: string, preset: string) -> bool {
+    if (sys_fork("cmake", "-S", srcFolder, "-B", buildFolder, "--preset", preset) == 0) {
+        return true;
+    }
+    return false;
+}
+
+fn build(buildFolder: string) -> bool {
+    if (sys_fork("ninja", "-C", buildFolder) == 0) {
+        return true;
+    }
+    return false;
+}
+
+fn install(buildFolder: string, prefixFolder: string) -> bool {
+    if (sys_fork("cmake", "--install", buildFolder, "--prefix", prefixFolder) == 0) {
+        return true;
+    }
+    return false;
+}
