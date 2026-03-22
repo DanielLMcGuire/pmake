@@ -156,7 +156,7 @@ fn main() -> int {
     if (!doClean) writeCache(preset, "preset");
 
     if (doClean && fexists(cacheFolder)) {
-        if (fexists(c_fmt(cacheFile, "configure") || fexists(outFolder))) {
+        if (fexists(c_fmt(cacheFile, "configure")) || fexists(outFolder)) {
             doConfigure = false;
             if (!frmdir(outFolder, true)) {
                 putf_error("Failed to clean output folder %s", outFolder);
