@@ -12,8 +12,8 @@
 #include <Value.hpp>
 
 // Forward declare native runtime entry points (linked in from the runtime library)
-extern "C" void exec(const unsigned char embeddedBytecode[], size_t embeddedBytecodeSize, const char *moduleName,
-                     const void *nativeFunctionsVector, const int argc, const char **argv);
+extern "C" int exec(void *state, const unsigned char embeddedBytecode[], size_t embeddedBytecodeSize,
+                    const char *moduleName, int argc, const char *argv[]);
 
 // Main entry point
 int main(int argc, char *argv[], char *envp[])
