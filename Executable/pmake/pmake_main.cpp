@@ -18,18 +18,13 @@ extern "C" int exec(void *state, const unsigned char embeddedBytecode[], size_t 
 // Main entry point
 int main(int argc, char *argv[], char *envp[])
 {
-	int exitCode = 1;
-
-	try
+    try
 	{
-		exec(embeddedBytecode, embeddedBytecodeSize, moduleName.c_str(), nullptr, argc, (const char **)argv);
-		exitCode = 0;
+        return exec(nullptr, embeddedBytecode, embeddedBytecodeSize, moduleName.c_str(), argc, (const char **)argv);
 	}
 	catch (const std::exception &e)
 	{
 		std::cerr << "Runtime Error: " << e.what() << "\n";
-		return 1;
 	}
-
-	return exitCode;
+	return -1;
 }
