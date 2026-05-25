@@ -1,20 +1,11 @@
-fn configure(srcFolder: string, buildFolder: string, preset: string) -> bool {
-    if (sys_fork("cmake", "-S", srcFolder, "-B", buildFolder, "--preset", preset) == 0) {
-        return true;
-    }
-    return false;
+fn configure(paths: ProjectPaths, preset: string) -> bool {
+    return sys_fork("cmake", "-S", paths.src, "-B", paths.out, "--preset", preset) == 0;
 }
 
-fn build(buildFolder: string) -> bool {
-    if (sys_fork("ninja", "-C", buildFolder) == 0) {
-        return true;
-    }
-    return false;
+fn build(paths: ProjectPaths) -> bool {
+    return sys_fork("ninja", "-C", paths.out) == 0;
 }
 
-fn install(buildFolder: string, prefixFolder: string) -> bool {
-    if (sys_fork("cmake", "--install", buildFolder, "--prefix", prefixFolder) == 0) {
-        return true;
-    }
-    return false;
+fn install(paths: ProjectPaths) -> bool {
+    return sys_fork("cmake", "--install", paths.out, "--prefix", paths.install) == 0;
 }
