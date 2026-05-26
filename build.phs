@@ -3,7 +3,7 @@ fn configure(paths: ProjectPaths, preset: string) -> bool {
 }
 
 fn build(paths: ProjectPaths) -> bool {
-    return sys_fork("ninja", ["--build", paths.out]) == 0;
+    return sys_fork("ninja", ["-C", paths.out]) == 0;
 }
 
 fn install(paths: ProjectPaths) -> bool {
