@@ -37,7 +37,7 @@ fn main(argv: string[]) -> int {
     var proj: ProjectConfig = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
     var paths: ProjectPaths = ProjectPaths{
         src: fcd(), install: "out", cache: ".pmake", 
-        out: ".pmake/CMakeBuild", cacheTpl: ".pmake/%s.cache", lockTpl: ".pmake/%s.lock"
+        out: ".pmake/CMakeBuild", cacheTpl: ".pmake/%s.cache", lock: ".pmake/%s.lock"
     };
 
     var pid: int = sys_pid();
@@ -85,7 +85,7 @@ fn main(argv: string[]) -> int {
     }
 
     if (args.doForce) {
-        clearStatus();
+        clearStatus(paths, proj);
         paths.out.frmdir(true);
     }
 
@@ -118,7 +118,7 @@ fn main(argv: string[]) -> int {
         paths.writeCache(paths.out.fabsolute(), "build");
     }
 
-    var l_statusFile: string = paths.lockTpl.c_fmt(proj.name);
+    var l_statusFile: string =  paths.lockTpl.c_fmt(proj.name);
     if (l_statusFile.fexists()) {
         var l_pid: int = l_statusFile.freadln(1).to_int();
         if (l_pid != pid) {
@@ -127,7 +127,7 @@ fn main(argv: string[]) -> int {
         }
     }
     
-    if (!args.doClean) writeStatus("init");
+    if (!args.doClean) writeStatus("init", paths, proj);
     if (!args.doClean) paths.writeCache(args.preset, "preset");
 
     if (args.doClean && paths.cache.fexists()) {
@@ -140,7 +140,7 @@ fn main(argv: string[]) -> int {
                 return 1;
             }
         }
-        clearStatus();
+        clearStatus(paths, proj);
         paths.cache.frmdir(true);
         if (!args.doBuild && !args.doInstall) {
             puts("Cleaned build and cache folders");
@@ -158,7 +158,7 @@ fn main(argv: string[]) -> int {
 
     if (args.doConfigure || !paths.cacheTpl.c_fmt("configure").fexists()) {
         update_win_progress(3, 0);
-        writeStatus("config");
+        writeStatus("config", paths, proj);
         putf("Configuring %s...", proj.name);
         
         if (!paths.configure(args.preset)) {
@@ -172,13 +172,13 @@ fn main(argv: string[]) -> int {
         paths.writeCache(args.preset, "preset");
         paths.writeCache(paths.install.fabsolute(), "install");
         paths.writeCache("", "configure");
-        writeStatus("idle");
+        writeStatus("idle", paths, proj);
         update_win_progress(0, 0);
     }
 
     if (args.doBuild) {
         update_win_progress(3, 0);
-        writeStatus("build");
+        writeStatus("build", paths, proj);
         putf("Building %s...", proj.name);
         
         if (!paths.build()) {
@@ -187,12 +187,12 @@ fn main(argv: string[]) -> int {
             return 1;
         }
         
-        writeStatus("idle");
+        writeStatus("idle", paths, proj);
         update_win_progress(0, 0);
     }
 
     if (args.doInstall) {
-        writeStatus("install");
+        writeStatus("install", paths, proj);
         putf("Installing %s...", proj.name);
         
         if (!paths.install()) {
@@ -200,12 +200,12 @@ fn main(argv: string[]) -> int {
             puts_error("Installation failed");
             return 1;
         }
-        writeStatus("idle");
+        writeStatus("idle", paths, proj);
     }
     
     return 0;
 }
 
 var stat: int = main(sys_args());
-clearStatus();
+clearStatus(paths, proj);
 shutdown(stat);
