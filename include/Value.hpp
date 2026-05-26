@@ -1,3 +1,28 @@
+// Copyright 2026 Daniel McGuire
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// README
+//
+// Provides types for the Phasor (and Pulsar) Programming Language.
+// Wraps a std::variant over null, bool, int64_t, double, string, struct, and array,
+// with structs, arrays, and strings heap-allocated via std::shared_ptr. Provides arithmetic,
+// comparison, and logical operators, and isTruthy() and toString().
+//
+// Also includes a std::formatter<Phasor::Value> implementation for use with std::format (or std::print).
+// Supports four format specifiers: default (value as-is), t (type name only),
+// T (type and value), ? (debug repr with quoted strings and recursive expansion), and
+// q (quoted strings, default otherwise).
+
+#define phsnull Value()
+
 #pragma once
 #include <iostream>
 #include <string>
@@ -6,39 +31,8 @@
 #include <memory>
 #include <vector>
 #include <format>
-#include <string>
-
-inline std::string escapeString(const std::string& input) {
-		std::string output;
-		output.reserve(input.size());
-
-		for (char c : input) {
-			switch (c) {
-				case '\n': output += "\\n";  break;
-				case '\t': output += "\\t";  break;
-				case '\r': output += "\\r";  break;
-				case '\0': output += "\\0";  break;
-				case '\\': output += "\\\\"; break;
-				case '\"': output += "\\\""; break;
-				case '\'': output += "\\'";  break;
-				case '\a': output += "\\a";  break;
-				case '\b': output += "\\b";  break;
-				case '\f': output += "\\f";  break;
-				case '\v': output += "\\v";  break;
-				default:
-					if (c < 0x20 || c == 0x7F) {
-						char buf[5];
-						snprintf(buf, sizeof(buf), "\\x%02X", (unsigned char)c);
-						output += buf;
-					} else {
-						output += c;
-					}
-					break;
-			}
-		}
-
-    return output;
-}
+#include "phsint.hpp"
+#include "PhasorString.hpp"
 
 /// @brief The Phasor Programming Language and Runtime
 namespace Phasor
@@ -47,7 +41,7 @@ namespace Phasor
 /**
  * @brief Runtime value types for the VM
  */
-enum class ValueType
+enum class ValueType : u8
 {
 	Null,
 	Bool,
@@ -68,13 +62,14 @@ class Value
   public:
 	struct StructInstance
 	{
-		std::string                            structName;
-		std::unordered_map<std::string, Value> fields;
+		PhsString structName;
+		std::unordered_map<PhsString, Value> fields;
 	};
 	using ArrayInstance = std::vector<Value>;
 
   private:
-	using DataType = std::variant<std::monostate, bool, int64_t, double, std::string, std::shared_ptr<StructInstance>,
+	using DataType = std::variant<std::monostate, bool, i64, f64, PhsString,
+	                              std::shared_ptr<StructInstance>,
 	                              std::shared_ptr<ArrayInstance>>;
 
 	DataType data;
@@ -89,142 +84,137 @@ class Value
 	{
 	}
 	/// @brief Integer constructor
-	Value(int64_t i) : data(i)
+	Value(i64 i) : data(i)
 	{
 	}
 	/// @brief Integer constructor
-	Value(int i) : data(static_cast<int64_t>(i))
+	Value(int i) : data(static_cast<i64>(i))
 	{
 	}
 	/// @brief Double constructor
-	Value(double d) : data(d)
+	Value(f64 d) : data(d)
 	{
 	}
 	/// @brief String constructor
-	Value(const std::string &s) : data(s)
+	Value(const std::string &s) : data(PhsString(s))
+	{
+	}
+	/// @brief Small Strring constructor
+	Value(const PhsString &s) : data(s)
 	{
 	}
 	/// @brief String constructor
-	Value(const char *s) : data(std::string(s))
+	Value(const char *s) : data(PhsString(s))
 	{
 	}
 	/// @brief Struct constructor
 	Value(std::shared_ptr<StructInstance> s) : data(std::move(s))
-	{
+	{	
 	}
 	/// @brief Array constructor
 	Value(std::shared_ptr<ArrayInstance> a) : data(std::move(a))
 	{
 	}
-
-	/// @brief Get the type of the value
-	ValueType getType() const
+	/// @brief Struct constructor
+	Value(std::initializer_list<std::pair<std::string, Value>> fields)
 	{
-		if (std::holds_alternative<std::monostate>(data))
-			return ValueType::Null;
-		if (std::holds_alternative<bool>(data))
-			return ValueType::Bool;
-		if (std::holds_alternative<int64_t>(data))
-			return ValueType::Int;
-		if (std::holds_alternative<double>(data))
-			return ValueType::Float;
-		if (std::holds_alternative<std::string>(data))
-			return ValueType::String;
-		if (std::holds_alternative<std::shared_ptr<StructInstance>>(data))
-			return ValueType::Struct;
-		if (std::holds_alternative<std::shared_ptr<ArrayInstance>>(data))
-			return ValueType::Array;
-		return ValueType::Null; // Should not be reached if default constructed
+		auto s = std::make_shared<StructInstance>();
+		for (auto& [k, v] : fields)
+			s->fields[PhsString(k)] = std::move(v);
+		data = std::move(s);
 	}
 
-	inline static Value typeToString(const ValueType &type)
+	static Value from_json(const std::string& json);
+
+	/// @brief Get the type of the value
+	[[nodiscard]] ValueType getType() const noexcept {
+		return static_cast<ValueType>(data.index());
+	}
+
+	static Value typeToString(const ValueType &type)
 	{
 		switch (type)
 		{
 		case ValueType::Null:
-			return Value("null");
+			return {"null"};
 		case ValueType::Bool:
-			return Value("bool");
+			return {"bool"};
 		case ValueType::Int:
-			return Value("int");
+			return {"int"};
 		case ValueType::Float:
-			return Value("float");
+			return {"float"};
 		case ValueType::String:
-			return Value("string");
+			return {"string"};
 		case ValueType::Struct:
-			return Value("struct");
+			return {"struct"};
 		case ValueType::Array:
-			return Value("array");
+			return {"array"};
 		default:
-			return Value("unknown");
+			return {"unknown"};
 		}
 	}
 
 	/// @brief Check if the value is null
-	bool isNull() const
-	{
-		return getType() == ValueType::Null;
-	}
-	/// @brief Check if the value is a boolean
-	bool isBool() const
-	{
-		return getType() == ValueType::Bool;
-	}
-	/// @brief Check if the value is an integer
-	bool isInt() const
-	{
-		return getType() == ValueType::Int;
-	}
-	/// @brief Check if the value is a double
-	bool isFloat() const
-	{
-		return getType() == ValueType::Float;
-	}
-	/// @brief Check if the value is a string
-	bool isString() const
-	{
-		return getType() == ValueType::String;
-	}
-	/// @brief Check if the value is a number
-	bool isNumber() const
-	{
-		return isInt() || isFloat();
-	}
+	[[nodiscard]] bool isNull()   const noexcept { return data.index() == 0; }
+	[[nodiscard]] bool isBool()   const noexcept { return data.index() == 1; }
+	[[nodiscard]] bool isInt()    const noexcept { return data.index() == 2; }
+	[[nodiscard]] bool isFloat()  const noexcept { return data.index() == 3; }
+	[[nodiscard]] bool isString() const noexcept { return data.index() == 4; }
+	[[nodiscard]] bool isNumber() const noexcept { return data.index() == 2 || data.index() == 3; }
 	/// @brief Check if the value is an array
-	bool isArray() const
+	[[nodiscard]] bool isArray() const noexcept
 	{
 		return std::holds_alternative<std::shared_ptr<ArrayInstance>>(data);
 	}
 
 	/// @brief Get the value as a boolean
-	bool asBool() const
+	[[nodiscard]] bool asBool() const noexcept
 	{
 		return std::get<bool>(data);
 	}
 	/// @brief Get the value as an integer
-	int64_t asInt() const
+	[[nodiscard]] i64 asInt() const noexcept
 	{
 		if (isInt())
-			return std::get<int64_t>(data);
+		{
+			return std::get<i64>(data);
+		}
 		if (isFloat())
-			return static_cast<int64_t>(std::get<double>(data));
+		{
+			return static_cast<i64>(std::get<f64>(data));
+		}
 		return 0;
 	}
-	/// @brief Get the value as a double
-	double asFloat() const
+	/// @brief Get the value as a f64
+	[[nodiscard]] f64 asFloat() const noexcept
 	{
 		if (isFloat())
-			return std::get<double>(data);
+		{
+			return std::get<f64>(data);
+		}
 		if (isInt())
-			return static_cast<double>(std::get<int64_t>(data));
+		{
+			return static_cast<f64>(std::get<i64>(data));
+		}
 		return 0.0;
 	}
 	/// @brief Get the value as a string
-	std::string asString() const
+	[[nodiscard]] std::string string() const noexcept
 	{
 		if (isString())
-			return std::get<std::string>(data);
+		{
+			return std::get<PhsString>(data).str();
+		}
 		return toString();
+	}
+	/// @brief Get the value as a Small String
+	[[nodiscard]] PhsString asString() const noexcept
+	{
+		if (isString())
+		{
+			return std::get<PhsString>(data);
+		}
+		return PhsString(toString());
 	}
 	/// @brief Get the value as an array
 	std::shared_ptr<ArrayInstance> asArray()
@@ -233,20 +223,86 @@ class Value
 	}
 
 	/// @brief Get the value as an array (const)
-	const std::shared_ptr<const ArrayInstance> asArray() const
+	[[nodiscard]] std::shared_ptr<const ArrayInstance> asArray() const noexcept
 	{
 		return std::get<std::shared_ptr<ArrayInstance>>(data);
+	}
+
+	[[nodiscard]] bool contains(const std::string& key) const noexcept
+	{
+		return hasField(PhsString(key));
+	}
+
+	[[nodiscard]] Value get_or(const std::string& key, Value fallback) const noexcept
+	{
+		if (!isStruct()) return fallback;
+		auto it = asStruct()->fields.find(PhsString(key));
+		return it != asStruct()->fields.end() ? it->second : fallback;
+	}
+
+	Value operator[](const size_t index) const
+	{
+		if (!std::holds_alternative<std::shared_ptr<ArrayInstance>>(data))
+			throw std::runtime_error("Value is not an array");
+		auto arr = asArray();
+		if (index >= arr->size())
+			throw std::out_of_range("Array index out of range");
+		return (*arr)[index];
+	}
+
+	Value& operator[](const size_t index)
+	{
+		if (isNull())
+			data = std::make_shared<ArrayInstance>();
+
+		if (!std::holds_alternative<std::shared_ptr<ArrayInstance>>(data))
+			throw std::runtime_error("Value is not an array");
+
+		auto arr = asArray();
+		if (index >= arr->size())
+			arr->resize(index + 1);
+
+		return (*arr)[index];
+	}
+
+	Value& operator[](const std::string& key)
+	{
+		if (isNull()) {
+			data.emplace<std::shared_ptr<StructInstance>>(std::make_shared<StructInstance>());
+		}
+
+		if (!std::holds_alternative<std::shared_ptr<StructInstance>>(data))
+			throw std::runtime_error("Value is not a struct");
+
+		return std::get<std::shared_ptr<StructInstance>>(data)->fields[PhsString(key)];
+	}
+
+	Value operator[](const std::string& key) const
+	{
+		if (!std::holds_alternative<std::shared_ptr<StructInstance>>(data))
+			throw std::runtime_error("Value is not a struct");
+		const auto& fields = std::get<std::shared_ptr<StructInstance>>(data)->fields;
+		auto it = fields.find(key);
+		if (it == fields.end())
+			return {};
+		return it->second;
 	}
 
 	/// @brief Add two values
 	Value operator+(const Value &other) const
 	{
 		if (isInt() && other.isInt())
-			return Value(asInt() + other.asInt());
+		{
+			return {asInt() + other.asInt()};
+		}
 		if (isNumber() && other.isNumber())
-			return Value(asFloat() + other.asFloat());
+		{
+			return {asFloat() + other.asFloat()};
+		}
 		if (isString() && other.isString())
+		{
 			return Value(asString() + other.asString());
+		}
 		throw std::runtime_error("Cannot add these value types");
 	}
 
@@ -254,19 +310,57 @@ class Value
 	Value operator-(const Value &other) const
 	{
 		if (isInt() && other.isInt())
-			return Value(asInt() - other.asInt());
+		{
+			return {asInt() - other.asInt()};
+		}
 		if (isNumber() && other.isNumber())
-			return Value(asFloat() - other.asFloat());
+		{
+			return {asFloat() - other.asFloat()};
+		}
 		throw std::runtime_error("Cannot subtract these value types");
+	}
+
+	Value &operator--()
+	{
+		if (isInt())
+		{
+			data = asInt() - 1;
+			return *this;
+		}
+		if (isFloat())
+		{
+			data = asFloat() - 1.0;
+			return *this;
+		}
+		throw std::runtime_error("Cannot decrement this value type");
+	}
+
+	Value &operator++()
+	{
+		if (isInt())
+		{
+			data = asInt() + 1;
+			return *this;
+		}
+		if (isFloat())
+		{
+			data = asFloat() + 1.0;
+			return *this;
+		}
+		throw std::runtime_error("Cannot increment this value type");
 	}
 
 	/// @brief Multiply two values
 	Value operator*(const Value &other) const
 	{
 		if (isInt() && other.isInt())
-			return Value(asInt() * other.asInt());
+		{
+			return {asInt() * other.asInt()};
+		}
 		if (isNumber() && other.isNumber())
-			return Value(asFloat() * other.asFloat());
+		{
+			return {asFloat() * other.asFloat()};
+		}
 		throw std::runtime_error("Cannot multiply these value types");
 	}
 
@@ -276,14 +370,18 @@ class Value
 		if (isInt() && other.isInt())
 		{
 			if (other.asInt() == 0)
+			{
 				throw std::runtime_error("Division by zero");
-			return Value(asInt() / other.asInt());
+			}
+			return {asInt() / other.asInt()};
 		}
 		if (isNumber() && other.isNumber())
 		{
 			if (other.asFloat() == 0.0)
+			{
 				throw std::runtime_error("Division by zero");
-			return Value(asFloat() / other.asFloat());
+			}
+			return {asFloat() / other.asFloat()};
 		}
 		throw std::runtime_error("Cannot divide these value types");
 	}
@@ -294,75 +392,91 @@ class Value
 		if (isInt() && other.isInt())
 		{
 			if (other.asInt() == 0)
+			{
 				throw std::runtime_error("Modulo by zero");
-			return Value(asInt() % other.asInt());
+			}
+			return {asInt() % other.asInt()};
 		}
 		throw std::runtime_error("Modulo requires integer operands");
 	}
 
-	/// @brief Unary negation
-	Value operator-() const
-	{
-		if (isInt())
-			return Value(-asInt());
-		if (isFloat())
-			return Value(-asFloat());
-		throw std::runtime_error("Cannot negate this value type");
-	}
-
 	/// @brief Logical negation
-	Value operator!() const
+	Value operator!() const noexcept
 	{
-		return Value(!isTruthy());
+		return {!isTruthy()};
 	}
 
 	/// @brief Logical AND
-	Value logicalAnd(const Value &other) const
+	[[nodiscard]] Value logicalAnd(const Value &other) const noexcept
 	{
-		return Value(isTruthy() && other.isTruthy());
+		return {isTruthy() && other.isTruthy()};
 	}
 
 	/// @brief Logical OR
-	Value logicalOr(const Value &other) const
+	[[nodiscard]] Value logicalOr(const Value &other) const noexcept
 	{
-		return Value(isTruthy() || other.isTruthy());
+		return {isTruthy() || other.isTruthy()};
 	}
 
 	/// @brief Helper to determine truthiness
-	bool isTruthy() const
+	[[nodiscard]] bool isTruthy() const noexcept
 	{
 		if (isNull())
+		{
 			return false;
+		}
 		if (isBool())
+		{
 			return asBool();
+		}
 		if (isInt())
+		{
 			return asInt() != 0;
+		}
 		if (isFloat())
+		{
 			return asFloat() != 0.0;
+		}
 		if (isString())
-    		return !asString().empty();
+		{
+			return !asString().empty();
+		}
 		return false;
 	}
 
 	/// @brief Comparison operations
-	bool operator==(const Value &other) const
+	bool operator==(const Value &other) const noexcept
 	{
 		if (getType() != other.getType())
+		{
 			return false;
+		}
 		if (isNull())
+		{
 			return true;
+		}
 		if (isBool())
+		{
 			return asBool() == other.asBool();
+		}
 		if (isInt())
+		{
 			return asInt() == other.asInt();
+		}
 		if (isFloat())
+		{
 			return asFloat() == other.asFloat();
+		}
 		if (isString())
+		{
 			return asString() == other.asString();
+		}
 		if (isArray())
 		{
 			if (!other.isArray())
+			{
 				return false;
+			}
 			const auto &self_arr = *asArray();
 			const auto &other_arr = *other.asArray();
 			return self_arr == other_arr;
@@ -371,7 +485,7 @@ class Value
 	}
 
 	/// @brief Inequality comparison
-	bool operator!=(const Value &other) const
+	bool operator!=(const Value &other) const noexcept
 	{
 		return !(*this == other);
 	}
@@ -380,11 +494,17 @@ class Value
 	bool operator<(const Value &other) const
 	{
 		if (isInt() && other.isInt())
+		{
 			return asInt() < other.asInt();
+		}
 		if (isNumber() && other.isNumber())
+		{
 			return asFloat() < other.asFloat();
+		}
 		if (isString() && other.isString())
+		{
 			return asString() < other.asString();
+		}
 		throw std::runtime_error("Cannot compare these value types ");
 	}
 
@@ -392,62 +512,226 @@ class Value
 	bool operator>(const Value &other) const
 	{
 		if (isInt() && other.isInt())
+		{
 			return asInt() > other.asInt();
+		}
 		if (isNumber() && other.isNumber())
+		{
 			return asFloat() > other.asFloat();
+		}
 		if (isString() && other.isString())
+		{
 			return asString() > other.asString();
+		}
 		throw std::runtime_error("Cannot compare these value types ");
 	}
 
 	/// @brief Less than or equal to comparison
-	bool operator<=(const Value &other) const
+	bool operator<=(const Value &other) const noexcept
 	{
 		return !(*this > other);
 	}
 	/// @brief Greater than or equal to comparison
-	bool operator>=(const Value &other) const
+	bool operator>=(const Value &other) const noexcept
 	{
 		return !(*this < other);
 	}
 
+	[[nodiscard]] std::string toRepr() const noexcept
+	{
+		if (isString())
+		{
+			return jsonSerialize().str();
+		}
+		return toString();
+	}
+
 	/// @brief Convert to string for printing
-	std::string toString() const
+	[[nodiscard]] std::string toString() const noexcept
 	{
 		if (isNull())
+		{
 			return "null";
+		}
 		if (isBool())
+		{
 			return asBool() ? "true" : "false";
+		}
 		if (isInt())
+		{
 			return std::to_string(asInt());
+		}
 		if (isFloat())
+		{
 			return std::to_string(asFloat());
+		}
 		if (isString())
-			return asString();
+		{
+			[[likely]] return string();
+		}
 		if (isArray())
 		{
-			std::string result = "[";
-			const auto &arr = *asArray();
-			for (size_t i = 0; i < arr.size(); ++i)
-			{
-				result += arr[i].toString();
-				if (i < arr.size() - 1)
-				{
-					result += ", ";
-				}
-			}
-			result += "]";
-			return result;
+			return jsonSerialize();
+		}
+		if (isStruct())
+		{
+			return jsonSerialize();
 		}
 		return "unknown";
 	}
 
 	/// @brief Convert to C Style String
-	const char *c_str() const
+	[[nodiscard]] const char *c_str() const
 	{
 		if (!isString())
-			throw std::runtime_error("c_str() can only be called on string values");
-		return std::get<std::string>(data).c_str();
+		{
+			[[unlikely]] throw std::runtime_error("c_str() can only be called on string values");
+		}
+		return std::get<PhsString>(data).c_str();
+	}
+
+	[[nodiscard]] PhsString jsonSerialize(int indent = -1, int depth = 0) const
+	{
+		if (isNull())
+		{
+			return "null";
+		}
+		if (isBool())
+		{
+			return asBool() ? "true" : "false";
+		}
+		if (isInt())
+		{
+			return std::to_string(asInt());
+		}
+		if (isFloat())
+		{
+			return std::to_string(asFloat());
+		}
+		if (isString())
+		{
+			PhsString result = "\"";
+			for (char c : string())
+			{
+				switch (c)
+				{
+				case '\"': result += "\\\""; break;
+				case '\\': result += "\\\\"; break;
+				case '\b': result += "\\b"; break;
+				case '\f': result += "\\f"; break;
+				case '\n': result += "\\n"; break;
+				case '\r': result += "\\r"; break;
+				case '\t': result += "\\t"; break;
+				default:
+					if (static_cast<unsigned char>(c) < 0x20)
+					{
+						char buf[7];
+						snprintf(buf, sizeof(buf), "\\u%04X", static_cast<unsigned char>(c));
+						result += buf;
+					}
+					else
+					{
+						result += c;
+					}
+					break;
+				}
+			}
+			result += "\"";
+			return result;
+		}
+
+		const bool pretty = indent >= 0;
+
+		auto make_indent = [&](int level) -> std::string
+		{
+			if (!pretty)
+			{
+				return {};
+			}
+
+			const size_t spaces = static_cast<size_t>(level) * static_cast<size_t>(indent);
+			return std::string(spaces, ' ');
+		};
+
+		if (isArray())
+		{
+			const auto &arr = *asArray();
+			if (arr.empty())
+			{
+				return "[]";
+			}
+
+			std::string result = pretty ? "[\n" : "[";
+			const std::string item_indent = make_indent(depth + 1);
+			const std::string end_indent = make_indent(depth);
+
+			for (size_t i = 0; i < arr.size(); ++i)
+			{
+				if (pretty)
+				{
+					result += item_indent;
+				}
+
+				result += arr[i].jsonSerialize(indent, depth + 1).str();
+
+				if (i + 1 < arr.size())
+				{
+					result += pretty ? ",\n" : ", ";
+				}
+				else if (pretty)
+				{
+					result += "\n";
+				}
+			}
+
+			result += end_indent;
+			result += "]";
+			return result;
+		}
+
+		if (isStruct())
+		{
+			const auto &s = *asStruct();
+			if (s.fields.empty())
+			{
+				return "{}";
+			}
+
+			std::string result = pretty ? "{\n" : "{";
+			const std::string item_indent = make_indent(depth + 1);
+			const std::string end_indent = make_indent(depth);
+
+			bool first = true;
+			for (const auto &[k, v] : s.fields)
+			{
+				if (!first)
+				{
+					result += pretty ? ",\n" : ", ";
+				}
+
+				if (pretty)
+				{
+					result += item_indent;
+				}
+
+				result += "\"";
+				result += k.str();
+				result += pretty ? "\": " : "\":";
+				result += v.jsonSerialize(indent, depth + 1).str();
+
+				first = false;
+			}
+
+			if (pretty)
+			{
+				result += "\n";
+			}
+			result += end_indent;
+			result += "}";
+			return result;
+		}
+
+		return "null";
 	}
 
 	/// @brief Print to output stream
@@ -457,7 +741,7 @@ class Value
 		return os;
 	}
 
-	bool isStruct() const
+	[[nodiscard]] bool isStruct() const
 	{
 		return std::holds_alternative<std::shared_ptr<StructInstance>>(data);
 	}
@@ -467,64 +751,291 @@ class Value
 		return std::get<std::shared_ptr<StructInstance>>(data);
 	}
 
-	const std::shared_ptr<const StructInstance> asStruct() const
+	[[nodiscard]] std::shared_ptr<const StructInstance> asStruct() const noexcept
 	{
 		return std::get<std::shared_ptr<StructInstance>>(data);
 	}
 
-	static Value createStruct(const std::string &name)
+	static Value createStruct(const PhsString &name)
 	{
 		return Value(std::make_shared<StructInstance>(StructInstance{.structName = name, .fields = {}}));
 	}
 
 	static Value createArray(std::vector<Value> elements = {})
 	{
-		return Value(std::make_shared<ArrayInstance>(std::move(elements)));
+		return {std::make_shared<ArrayInstance>(std::move(elements))};
 	}
 
-	Value getField(const std::string &name) const
+	[[nodiscard]] Value getField(const PhsString &name) const
 	{
 		if (!std::holds_alternative<std::shared_ptr<StructInstance>>(data))
-			throw std::runtime_error("getField() called on non-struct value");
+		{
+			[[unlikely]] throw std::runtime_error("getField() called on non-struct value");
+		}
 		auto s = std::get<std::shared_ptr<StructInstance>>(data);
 		auto it = s->fields.find(name);
 		if (it == s->fields.end())
-			return Value();
+		{
+			return {};
+		}
 		return it->second;
 	}
 
-	void setField(const std::string &name, Value value)
+	void setField(const PhsString &name, Value value)
 	{
 		if (!std::holds_alternative<std::shared_ptr<StructInstance>>(data))
-			throw std::runtime_error("setField() called on non-struct value");
+		{
+			[[unlikely]] throw std::runtime_error("setField() called on non-struct value");
+		}
 		auto s = std::get<std::shared_ptr<StructInstance>>(data);
 		s->fields[name] = std::move(value);
 	}
 
-	bool hasField(const std::string &name) const
+	[[nodiscard]] bool hasField(const PhsString &name) const noexcept
 	{
 		if (!std::holds_alternative<std::shared_ptr<StructInstance>>(data))
+		{
 			return false;
+		}
 		auto s = std::get<std::shared_ptr<StructInstance>>(data);
-		return s->fields.find(name) != s->fields.end();
+		return s->fields.contains(name);
 	}
 };
+
+namespace json {
+    using json_iterator = std::string_view::const_iterator;
+
+    inline void skip_whitespace(json_iterator& it, json_iterator end) {
+        while (it != end && std::isspace(static_cast<unsigned char>(*it))) ++it;
+    }
+
+    inline PhsString parse_json_string(json_iterator& it, json_iterator end) {
+        if (it == end || *it != '"')
+            throw std::runtime_error("Expected '\"'");
+        ++it;
+
+        std::string result;
+        while (it != end && *it != '"') {
+            if (*it == '\\') {
+                ++it;
+                if (it == end) throw std::runtime_error("Unexpected end of string");
+                switch (*it) {
+                    case '"':  result += '"';  break;
+                    case '\\': result += '\\'; break;
+                    case '/':  result += '/';  break;
+                    case 'b':  result += '\b'; break;
+                    case 'f':  result += '\f'; break;
+                    case 'n':  result += '\n'; break;
+                    case 'r':  result += '\r'; break;
+                    case 't':  result += '\t'; break;
+                    case 'u': {
+                        if (std::distance(it, end) < 5)
+                            throw std::runtime_error("Invalid \\u escape");
+                        ++it; // move past 'u'
+                        char hex[5] = {0};
+                        for (int i = 0; i < 4; ++i, ++it) {
+                            if (it == end || !std::isxdigit(static_cast<unsigned char>(*it)))
+                                throw std::runtime_error("Invalid hex digit in \\u");
+                            hex[i] = *it;
+                        }
+                        --it;
+                        unsigned long codepoint = std::strtoul(hex, nullptr, 16);
+                        if (codepoint < 0x80) {
+                            result += static_cast<char>(codepoint);
+                        } else if (codepoint < 0x800) {
+                            result += static_cast<char>(0xC0 | (codepoint >> 6));
+                            result += static_cast<char>(0x80 | (codepoint & 0x3F));
+                        } else if (codepoint < 0xD800 || codepoint > 0xDFFF) {
+                            result += static_cast<char>(0xE0 | (codepoint >> 12));
+                            result += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                            result += static_cast<char>(0x80 | (codepoint & 0x3F));
+                        } else {
+                            result += "\xEF\xBF\xBD";
+                        }
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error("Invalid escape character");
+                }
+            } else {
+                result += *it;
+            }
+            ++it;
+        }
+        if (it == end) throw std::runtime_error("Unterminated string");
+        ++it;
+        return PhsString(result);
+    }
+
+    inline Value parse_value(json_iterator& it, json_iterator end);
+
+    inline Value parse_json_number(json_iterator& it, json_iterator end) {
+        auto start = it;
+        bool is_float = false;
+
+        if (it != end && *it == '-') ++it;
+        if (it == end || !std::isdigit(static_cast<unsigned char>(*it)))
+            throw std::runtime_error("Invalid number");
+        while (it != end && std::isdigit(static_cast<unsigned char>(*it))) ++it;
+
+        if (it != end && *it == '.') {
+            is_float = true;
+            ++it;
+            if (it == end || !std::isdigit(static_cast<unsigned char>(*it)))
+                throw std::runtime_error("Invalid number");
+            while (it != end && std::isdigit(static_cast<unsigned char>(*it))) ++it;
+        }
+        if (it != end && (*it == 'e' || *it == 'E')) {
+            is_float = true;
+            ++it;
+            if (it != end && (*it == '+' || *it == '-')) ++it;
+            if (it == end || !std::isdigit(static_cast<unsigned char>(*it)))
+                throw std::runtime_error("Invalid number");
+            while (it != end && std::isdigit(static_cast<unsigned char>(*it))) ++it;
+        }
+
+        std::string number_str(start, it);
+        if (is_float) {
+            try {
+                return Value(std::stod(number_str));
+            } catch (...) {
+                throw std::runtime_error("Number out of range");
+            }
+        } else {
+            try {
+                i64 val = std::stoll(number_str);
+                return Value(val);
+            } catch (const std::out_of_range&) {
+                try {
+                    return Value(std::stod(number_str));
+                } catch (...) {
+                    throw std::runtime_error("Number out of range");
+                }
+            }
+        }
+    }
+
+    inline Value parse_json_array(json_iterator& it, json_iterator end) {
+        if (it == end || *it != '[')
+            throw std::runtime_error("Expected '['");
+        ++it;
+        std::vector<Value> elements;
+        skip_whitespace(it, end);
+        if (it != end && *it != ']') {
+            while (true) {
+                elements.push_back(parse_value(it, end));
+                skip_whitespace(it, end);
+                if (it != end && *it == ',') {
+                    ++it;
+                    skip_whitespace(it, end);
+                } else {
+                    break;
+                }
+            }
+        }
+        if (it == end || *it != ']')
+            throw std::runtime_error("Expected ']'");
+        ++it;
+        return Value(std::make_shared<Value::ArrayInstance>(std::move(elements)));
+    }
+
+    inline Value parse_json_object(json_iterator& it, json_iterator end) {
+        if (it == end || *it != '{')
+            throw std::runtime_error("Expected '{'");
+        ++it;
+        auto struct_ptr = std::make_shared<Value::StructInstance>();
+        struct_ptr->structName = PhsString();
+
+        skip_whitespace(it, end);
+        if (it != end && *it != '}') {
+            while (true) {
+                skip_whitespace(it, end);
+                PhsString key = parse_json_string(it, end);
+                skip_whitespace(it, end);
+                if (it == end || *it != ':')
+                    throw std::runtime_error("Expected ':'");
+                ++it;
+                Value val = parse_value(it, end);
+                struct_ptr->fields[key] = std::move(val);
+                skip_whitespace(it, end);
+                if (it != end && *it == ',') {
+                    ++it;
+                    skip_whitespace(it, end);
+                } else {
+                    break;
+                }
+            }
+        }
+        if (it == end || *it != '}')
+            throw std::runtime_error("Expected '}'");
+        ++it;
+        return Value(std::move(struct_ptr));
+    }
+
+    inline Value parse_value(json_iterator& it, json_iterator end) {
+        skip_whitespace(it, end);
+        if (it == end)
+            throw std::runtime_error("Unexpected end of input");
+
+        if (*it == '"') {
+            return Value(parse_json_string(it, end));
+        } else if (*it == '[') {
+            return parse_json_array(it, end);
+        } else if (*it == '{') {
+            return parse_json_object(it, end);
+        } else if (*it == 't' && std::string_view(it, end).substr(0, 4) == "true") {
+            it += 4;
+            return Value(true);
+        } else if (*it == 'f' && std::string_view(it, end).substr(0, 5) == "false") {
+            it += 5;
+            return Value(false);
+        } else if (*it == 'n' && std::string_view(it, end).substr(0, 4) == "null") {
+            it += 4;
+            return Value();
+        } else if (*it == '-' || std::isdigit(static_cast<unsigned char>(*it))) {
+            return parse_json_number(it, end);
+        } else {
+            throw std::runtime_error("Unexpected character");
+        }
+    }
+} // namespace json
+
+inline Value Value::from_json(const std::string& json) {
+    std::string_view sv(json);
+    auto it = sv.begin();
+    auto end = sv.end();
+    Value result = json::parse_value(it, end);
+    json::skip_whitespace(it, end);
+    if (it != end)
+        throw std::runtime_error("Extra characters after JSON value");
+    return result;
+}
+
 } // namespace Phasor
 
-template <>
-struct std::formatter<Phasor::Value>
+template <> struct std::formatter<Phasor::Value>
 {
-    enum class Style { Value, TypeOnly, TypeValue, Debug, Quoted };
-    Style            style       = Style::Value;
-    std::string_view passthrough;
-
-    constexpr auto parse(std::format_parse_context &ctx)
+	enum class Style
 	{
-		auto it  = ctx.begin();
+		Value,
+		TypeOnly,
+		TypeValue,
+		Debug,
+		Quoted
+	};
+	Style            style = Style::Value;
+	std::string_view passthrough;
+
+	constexpr auto parse(std::format_parse_context &ctx)
+	{
+		auto it = ctx.begin();
 		auto end = ctx.end();
 
 		auto close = it;
-		while (close != end && *close != '}') ++close;
+		while (close != end && *close != '}')
+		{
+			++close;
+		}
 
 		std::string_view full(&*it, static_cast<size_t>(close - it));
 		std::string_view inner = full;
@@ -533,11 +1044,24 @@ struct std::formatter<Phasor::Value>
 		{
 			switch (full.back())
 			{
-			case 't': style = Style::TypeOnly;  inner = full.substr(0, full.size() - 1); break;
-			case 'T': style = Style::TypeValue; inner = full.substr(0, full.size() - 1); break;
-			case '?': style = Style::Debug;     inner = full.substr(0, full.size() - 1); break;
-			case 'q': style = Style::Quoted;    inner = full.substr(0, full.size() - 1); break;
-			default:  break;
+			case 't':
+				style = Style::TypeOnly;
+				inner = full.substr(0, full.size() - 1);
+				break;
+			case 'T':
+				style = Style::TypeValue;
+				inner = full.substr(0, full.size() - 1);
+				break;
+			case '?':
+				style = Style::Debug;
+				inner = full.substr(0, full.size() - 1);
+				break;
+			case 'q':
+				style = Style::Quoted;
+				inner = full.substr(0, full.size() - 1);
+				break;
+			default:
+				break;
 			}
 		}
 
@@ -545,103 +1069,159 @@ struct std::formatter<Phasor::Value>
 		return close;
 	}
 
-    template <typename FormatContext>
-    auto format(const Phasor::Value &v, FormatContext &ctx) const
-    {
-        std::string fmtstr;
-        fmtstr.reserve(passthrough.size() + 3);
-        fmtstr += "{:";
-        fmtstr += passthrough;
-        fmtstr += '}';
+	template <typename FormatContext> auto format(const Phasor::Value &v, FormatContext &ctx) const
+	{
+		std::string fmtstr;
+		fmtstr.reserve(passthrough.size() + 3);
+		fmtstr += "{:";
+		fmtstr += passthrough;
+		fmtstr += '}';
 
-        auto fwd = [&]<typename T>(const T &val) {
-            return std::vformat_to(ctx.out(), fmtstr, std::make_format_args(val));
-        };
+		auto fwd = [&]<typename T>(const T &val) {
+			return std::vformat_to(ctx.out(), fmtstr, std::make_format_args(val));
+		};
 
-        using namespace Phasor;
+		using namespace Phasor;
 
-        switch (style)
-        {
-        case Style::TypeOnly:
-            return fwd(Value::typeToString(v.getType()).asString());
+		switch (style)
+		{
+		case Style::TypeOnly:
+			return fwd(Value::typeToString(v.getType()).asString().str());
 
-        case Style::TypeValue:
-            return fwd(Value::typeToString(v.getType()).asString()
-                       + "(" + escapeString(v.toString()) + ")");
+		case Style::TypeValue:
+			return fwd(Value::typeToString(v.getType()).asString().str() + "(" + escapeString(v.toString()) + ")");
 
-        case Style::Debug:
-            return fwd(debug_repr(v));
+		case Style::Debug:
+			return fwd(debug_repr(v));
 
-        case Style::Quoted:
-            if (v.isString())
-                return fwd("\"" + escapeString(v.asString()) + "\"");
-            [[fallthrough]];
+		case Style::Quoted:
+			if (v.isString())
+			{
+				return fwd("\"" + escapeString(v.asString()) + "\"");
+			}
+			[[fallthrough]];
 
-        case Style::Value:
-        default:
-            switch (v.getType())
-            {
-            case ValueType::Null:   return std::format_to(ctx.out(), "null");
-            case ValueType::Bool:   return fwd(v.asBool());
-            case ValueType::Int:    return fwd(v.asInt());
-            case ValueType::Float:  return fwd(v.asFloat());
-            case ValueType::String: return fwd(debug_repr(escapeString(v.asString())));
-            case ValueType::Array:  return fwd(v.toString());
-            case ValueType::Struct: return fwd(v.toString());
-            }
-        }
-        return ctx.out();
-    }
+		case Style::Value:
+		default:
+			switch (v.getType())
+			{
+			case ValueType::Null:
+				return std::format_to(ctx.out(), "null");
+			case ValueType::Bool:
+				return fwd(v.asBool());
+			case ValueType::Int:
+				return fwd(v.asInt());
+			case ValueType::Float:
+				return fwd(v.asFloat());
+			case ValueType::String:
+				return fwd(v.string());
+			case ValueType::Array:
+				return fwd(v.toString());
+			case ValueType::Struct:
+				return fwd(v.toString());
+			}
+		}
+		return ctx.out();
+	}
 
   private:
-    static std::string debug_repr(const Phasor::Value &v)
-    {
-        using Phasor::ValueType;
-        switch (v.getType())
-        {
-        case ValueType::Null:   return "null";
-        case ValueType::String: return "\"" + escapeString(v.asString()) + "\"";
-        case ValueType::Array:
-        {
-            const auto &arr = *v.asArray();
-            std::string out = "[";
-            for (std::size_t i = 0; i < arr.size(); ++i)
-            {
-                out += debug_repr(arr[i]);
-                if (i + 1 < arr.size()) out += ", ";
-            }
-            return out + "]";
-        }
-        case ValueType::Struct:
-        {
-            const auto &s = *v.asStruct();
-            std::string out = s.structName + " { ";
-            bool first = true;
-            for (const auto &[k, val] : s.fields)
-            {
-                if (!first) out += ", ";
-                out += k + ": " + debug_repr(val);
-                first = false;
-            }
-            return out + " }";
-        }
-        default: return v.toString();
-        }
-    }
+	static std::string escapeString(std::string_view input)
+	{
+		std::string output;
+		output.reserve(input.size());
+		for (char c : input)
+		{
+			switch (c)
+			{
+			case '\n':
+				output += "\\n";
+				break;
+			case '\t':
+				output += "\\t";
+				break;
+			case '\r':
+				output += "\\r";
+				break;
+			case '\0':
+				output += "\\0";
+				break;
+			case '\\':
+				output += "\\\\";
+				break;
+			case '\"':
+				output += "\\\"";
+				break;
+			case '\'':
+				output += "\\'";
+				break;
+			case '\a':
+				output += "\\a";
+				break;
+			case '\b':
+				output += "\\b";
+				break;
+			case '\f':
+				output += "\\f";
+				break;
+			case '\v':
+				output += "\\v";
+				break;
+			default:
+				if (c < 0x20 || c == 0x7F)
+				{
+					char buf[5];
+					snprintf(buf, sizeof(buf), "\\x%02X", (unsigned char)c);
+					output += buf;
+				}
+				else
+				{
+					output += c;
+				}
+				break;
+			}
+		}
+		return output;
+	}
 
-    static std::string escape(const std::string &s)
-    {
-        std::string out;
-        out.reserve(s.size());
-        for (char c : s)
-            switch (c)
-            {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n";  break;
-            case '\t': out += "\\t";  break;
-            default:   out += c;
-            }
-        return out;
-    }
+	static std::string debug_repr(const Phasor::Value &v)
+	{
+		using Phasor::ValueType;
+		switch (v.getType())
+		{
+		case ValueType::Null:
+			return "null";
+		case ValueType::String:
+			return "\"" + escapeString(v.asString()) + "\"";
+		case ValueType::Array: {
+			const auto &arr = *v.asArray();
+			std::string out = "[";
+			for (std::size_t i = 0; i < arr.size(); ++i)
+			{
+				out += debug_repr(arr[i]);
+				if (i + 1 < arr.size())
+				{
+					out += ", ";
+				}
+			}
+			return out + "]";
+		}
+		case ValueType::Struct: {
+			const auto &s = *v.asStruct();
+			std::string out = s.structName.str() + " { ";
+			bool        first = true;
+			for (const auto &[k, val] : s.fields)
+			{
+				if (!first)
+				{
+					out += ", ";
+				}
+				out += k.str() + ": " + debug_repr(val);
+				first = false;
+			}
+			return out + " }";
+		}
+		default:
+			return v.toString();
+		}
+	}
 };
