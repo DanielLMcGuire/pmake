@@ -1,7 +1,7 @@
 fn writeStatus(text: string) -> bool {
-    var fileName = c_fmt(lockFile, project);
-    var tmpFile = c_fmt("%s.tmp", fileName);
-    var finalText = c_fmt("%s\n%d", text, pid);
+    var fileName: string = c_fmt(lockFile, project);
+    var tmpFile: string = c_fmt("%s.tmp", fileName);
+    var finalText: string = c_fmt("%s\n%d", text, pid);
     if (fexists(fileName)) {
         if (!frm(fileName)) {
             puts_error("Failed to delete old status file");
@@ -21,7 +21,7 @@ fn writeStatus(text: string) -> bool {
 }
 
 fn clearStatus() -> bool {
-    var fileName = c_fmt(lockFile, project);
+    var fileName: string = c_fmt(lockFile, project);
     if (fexists(fileName)) {
         if (!frm(fileName)) {
             puts_error("Failed to delete status file");

@@ -34,8 +34,8 @@ Options:
 }
 
 fn main(argv: string[]) -> int {
-    var proj = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
-    var paths = ProjectPaths{
+    var proj: ProjectConfig = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
+    var paths: ProjectPaths = ProjectPaths{
         src: fcd(), install: "out", cache: ".pmake", 
         out: ".pmake/CMakeBuild", cacheTpl: ".pmake/%s.cache", lockTpl: ".pmake/%s.lock"
     };

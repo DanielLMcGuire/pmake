@@ -1,5 +1,5 @@
 fn parseArgs(argv: string[]) -> CmdArgs {
-    var args = CmdArgs{
+    var args: CmdArgs = CmdArgs{
         preset: "", src: "", install: "", out: "", 
         doConfigure: false, doBuild: false, doInstall: false, 
         doClean: false, doForce: false, showHelp: false, error: ""
