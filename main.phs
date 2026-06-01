@@ -8,6 +8,12 @@ include "build.phs";
 include "cache.phs";
 include "lockfile.phs";
 
+var proj: ProjectConfig = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
+var paths: ProjectPaths = ProjectPaths{
+    src: fcd(), install: "out", cache: ".pmake", 
+    out: ".pmake/CMakeBuild", cacheTpl: ".pmake/%s.cache", lock: ".pmake/%s.lock"
+};
+
 fn printHelp(program: string, configured: bool) {
     var presetMsg: string;
     if (configured) 
@@ -34,8 +40,8 @@ Options:
 }
 
 fn main(argv: string[]) -> int {
-    var proj: ProjectConfig = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
-    var paths: ProjectPaths = ProjectPaths{
+    proj = ProjectConfig{ name: "<project>", version: "0.0.0", subcmd: "" };
+    paths = ProjectPaths{
         src: fcd(), install: "out", cache: ".pmake", 
         out: ".pmake/CMakeBuild", cacheTpl: ".pmake/%s.cache", lock: ".pmake/%s.lock"
     };
